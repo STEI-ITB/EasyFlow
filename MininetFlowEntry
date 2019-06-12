@@ -1,0 +1,144 @@
+from mininet.net import Mininet
+
+from mininet.node import Controller, RemoteController, OVSKernelSwitch, UserSwitch
+
+from mininet.cli import CLI
+
+from mininet.log import setLogLevel
+
+from mininet.link import Link, TCLink
+
+ 
+
+def topology():
+
+        net = Mininet( controller=RemoteController, link=TCLink, switch=OVSKernelSwitch )
+
+        h1 = net.addHost( 'h1', ip="10.0.1.2/24", mac="00:00:00:00:00:01", defaultRoute='via 10.0.1.1' )
+
+        h2 = net.addHost( 'h2', ip="10.0.2.2/24", mac="00:00:00:00:00:02", defaultRoute='via 10.0.2.1' )
+
+        h3 = net.addHost( 'h3', ip="10.0.3.2/24", mac="00:00:00:00:00:03", defaultRoute='via 10.0.3.1' )
+
+        s1 = net.addSwitch( 's1', mac="00:00:00:00:00:10")
+
+        c0 = net.addController( 'c0', controller=RemoteController, ip='10.10.0.0', port=6633) 
+
+        net.addLink( h1, s1, intfName2='s3-eth1', params2={'ip' : '10.0.1.1/24'} )
+
+        net.addLink( h2, s1, intfName2='s3-eth2', params2={'ip' : '10.0.2.1/24'} )
+
+        net.addLink( h3, s1, intfName2='s3-eth3', params2={'ip' : '10.0.3.1/24'} )
+
+        net.build()
+
+        c0.start()
+
+        s1.start( [c0] )
+
+        s1.cmd('ovs-ofctl add-group -OOpenFlow13 s1 group_id=1,type=all,bucket=output:1')
+
+        s1.cmd('ovs-ofctl add-group -OOpenFlow13 s1 group_id=2,type=all,bucket=output:2')
+
+        s1.cmd('ovs-ofctl add-group -OOpenFlow13 s1 group_id=3,type=all,bucket=output:3')
+
+        
+        
+
+        #tabel 0
+
+        s1.cmd('ovs-ofctl add-flow -OOpenFlow13 s1 "table=0, priority=1000, dl_type=0x0806, actions=resubmit(,105)"')
+ 
+        s1.cmd('ovs-ofctl add-flow -OOpenFlow13 s1 "table=0, priority=100, dl_dst=00:00:5E:00:02:01, action=resubmit(,5)"')
+	
+        s1.cmd('ovs-ofctl add-flow -OOpenFlow13 s1 "table=0, priority=0, action=resubmit(,20)"')
+
+
+        #spine s1 tabel 5
+	
+        s1.cmd('ovs-ofctl add-flow -OOpenFlow13 s1 "table=5, priority=65535, dl_type=0x0800, nw_dst=10.0.1.0/24 actions=resubmit(,10)"')
+	
+        s1.cmd('ovs-ofctl add-flow -OOpenFlow13 s1 "table=5, priority=65535, dl_type=0x0800, nw_dst=10.0.2.0/24 actions=resubmit(,10)"')
+
+        s1.cmd('ovs-ofctl add-flow -OOpenFlow13 s1 "table=5, priority=65535, dl_type=0x0800, nw_dst=10.0.3.0/24 actions=resubmit(,10)"')
+	
+        s1.cmd('ovs-ofctl add-flow -OOpenFlow13 s1 "table=5, priority=0, actions=resubmit(,10)"')
+
+      
+        
+
+        #spine s1 tabel 15    
+	
+        s1.cmd('ovs-ofctl add-flow -OOpenFlow13 s1 "table=10, dl_type=0x0800, nw_dst=10.0.1.0/24, actions=mod_dl_src=00:00:5E:00:02:01, dec_ttl, resubmit(,15)"')
+	
+        s1.cmd('ovs-ofctl add-flow -OOpenFlow13 s1 "table=10, dl_type=0x0800, nw_dst=10.0.2.0/24, actions=mod_dl_src=00:00:5E:00:02:01, dec_ttl, resubmit(,15)"')
+
+        s1.cmd('ovs-ofctl add-flow -OOpenFlow13 s1 "table=10, dl_type=0x0800, nw_dst=10.0.3.0/24, actions=mod_dl_src=00:00:5E:00:02:01, dec_ttl, resubmit(,15)"')
+	
+        s1.cmd('ovs-ofctl add-flow -OOpenFlow13 s1 "table=10, priority=0, actions=output:0"')
+
+       
+
+        #spine s1 tabel 15
+	
+        s1.cmd('ovs-ofctl add-flow -OOpenFlow13 s1 "table=15, dl_type=0x0800, nw_dst=10.0.1.2, actions=mod_dl_dst:00:00:00:00:00:01, resubmit(,20)"')
+	
+        s1.cmd('ovs-ofctl add-flow -OOpenFlow13 s1 "table=15, dl_type=0x0800, nw_dst=10.0.2.2, actions=mod_dl_dst:00:00:00:00:00:02, resubmit(,20)"')
+	
+        s1.cmd('ovs-ofctl add-flow -OOpenFlow13 s1 "table=15, dl_type=0x0800, nw_dst=10.0.3.2, actions=mod_dl_dst:00:00:00:00:00:03, resubmit(,20)"')
+
+        s1.cmd('ovs-ofctl add-flow -OOpenFlow13 s1 "table=15, priority=0, actions=resubmit(,20)"')
+
+        
+
+        #tabel 20
+
+        s1.cmd('ovs-ofctl add-flow -OOpenFlow13 s1 "table=20, priority=0, actions=resubmit(,25)"')
+
+       
+        #spine s1, tabel 25        
+
+        s1.cmd('ovs-ofctl add-flow -OOpenFlow13 s1 "table=25, in_port=1, dl_dst=01:00:00:00:00:00/01:00:00:00:00:00, actions=group=1"')
+
+        s1.cmd('ovs-ofctl add-flow -OOpenFlow13 s1 "table=25, in_port=2, dl_dst=01:00:00:00:00:00/01:00:00:00:00:00, actions=group=2"')	
+
+        s1.cmd('ovs-ofctl add-flow -OOpenFlow13 s1 "table=25, in_port=3, dl_dst=01:00:00:00:00:00/01:00:00:00:00:00, actions=group=3"')	
+
+        s1.cmd('ovs-ofctl add-flow -OOpenFlow13 s1 "table=25, dl_dst=00:00:00:00:00:01,actions=output=1"')
+	
+        s1.cmd('ovs-ofctl add-flow -OOpenFlow13 s1 "table=25, dl_dst=00:00:00:00:00:02,actions=output=2"')
+	
+        s1.cmd('ovs-ofctl add-flow -OOpenFlow13 s1 "table=25, dl_dst=00:00:00:00:00:03,actions=output=3"')
+	
+
+        
+
+        #Spine s1 , tabel 105 
+        s1.cmd('ovs-ofctl add-flow -OOpenFlow13 s1 "table=105, dl_type=0x0806, nw_dst=10.0.1.1, actions=move:NXM_OF_ETH_SRC[]->NXM_OF_ETH_DST[], mod_dl_src:00:00:5E:00:02:01, load:0x2->NXM_OF_ARP_OP[], move:NXM_NX_ARP_SHA[]->NXM_NX_ARP_THA[], move:NXM_OF_ARP_SPA[]->NXM_OF_ARP_TPA[], load:0x00005e000201->NXM_NX_ARP_SHA[], load:0x0a000101->NXM_OF_ARP_SPA[], in_port"')
+
+        s1.cmd('ovs-ofctl add-flow -OOpenFlow13 s1 "table=105, dl_type=0x0806, nw_dst=10.0.2.1, actions=move:NXM_OF_ETH_SRC[]->NXM_OF_ETH_DST[],  mod_dl_src:00:00:5E:00:02:01, load:0x2->NXM_OF_ARP_OP[], move:NXM_NX_ARP_SHA[]->NXM_NX_ARP_THA[], move:NXM_OF_ARP_SPA[]->NXM_OF_ARP_TPA[], load:0x00005e000201->NXM_NX_ARP_SHA[], load:0x0a000201->NXM_OF_ARP_SPA[], in_port"')
+
+        s1.cmd('ovs-ofctl add-flow -OOpenFlow13 s1 "table=105, dl_type=0x0806, nw_dst=10.0.3.1, actions=move:NXM_OF_ETH_SRC[]->NXM_OF_ETH_DST[], mod_dl_src:00:00:5E:00:02:01, load:0x2->NXM_OF_ARP_OP[], move:NXM_NX_ARP_SHA[]->NXM_NX_ARP_THA[], move:NXM_OF_ARP_SPA[]->NXM_OF_ARP_TPA[], load:0x00005e000201->NXM_NX_ARP_SHA[], load:0x0a000301->NXM_OF_ARP_SPA[], in_port"')
+
+        s1.cmd('ovs-ofctl add-flow -OOpenFlow13 s1 "table=105, priority=0, action=resubmit(,20)"')
+        
+        
+
+       
+        print "*** Running CLI"
+
+        CLI( net )
+
+ 
+
+        print "*** Stopping network"
+
+        net.stop()
+
+      
+
+if __name__ == '__main__':
+
+    setLogLevel( 'info' )
+
+    topology()         
